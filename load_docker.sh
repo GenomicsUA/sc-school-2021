@@ -1,0 +1,1 @@
+docker load < 2021_04_scc_data_analysis_workshop.tar.gz

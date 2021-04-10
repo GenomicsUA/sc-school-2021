@@ -1,3 +1,6 @@
+Update: added annotation markers: https://docs.google.com/spreadsheets/d/1My1IcMZGQL-PzO4ovo5P461wvOVisSeQeHz0Ai9M6PE/edit?usp=sharing
+Update: the Workshop code is available: https://github.com/GenomicsUA/sc-school-2021/blob/main/2021_04_10_script.md
+
 # sc-school-2021
 
 ## Introduction

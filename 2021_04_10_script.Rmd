@@ -1,0 +1,257 @@
+---
+title: "2021-04-10_workshop"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+#memory.limit(18000)
+#install.packages(c('here', "Seurat", "patchwork", "dplyr", "sctransform",
+#                   "tidyverse","ggplot2"))
+
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager") 
+#BiocManager::install((c('AnnotationHub', 'ensembldb', 'multtest', 
+#                          'ReactomeGSA', 'topGO', 'Rgraphviz')))
+```
+
+```{r include=FALSE}
+library(here)
+library("Seurat")
+library("patchwork")
+library("dplyr")
+library("sctransform")
+library("ReactomeGSA")
+library("topGO")
+library("Rgraphviz")
+library("cowplot")
+library("tidyverse")
+library("ggplot2")
+```
+
+```{r packages_check}
+(.packages())
+```
+
+```{r load_data}
+here()
+
+data_dir_1 <- here("datasets", "hcc")
+sample1_data <- Read10X(data.dir = data_dir_1)
+HCC_sample <- CreateSeuratObject(counts = sample1_data, project = "HCC")
+
+data_dir_2 <- here("datasets", "healthy")
+sample2_data <- Read10X(data.dir = data_dir_2)
+healthy_sample <- CreateSeuratObject(counts = sample2_data, project = "Healthy")
+```
+
+```{r QC}
+#healthy_mt
+healthy_sample[["percent.mt"]] <- 
+  PercentageFeatureSet(healthy_sample, pattern = "^MT-")
+VlnPlot(healthy_sample, features = 
+          c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+#HCC_mt
+HCC_sample[["percent.mt"]] <- 
+  PercentageFeatureSet(HCC_sample, pattern = "^MT-")
+VlnPlot(HCC_sample, features = 
+          c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+
+#filter_out
+healthy_sample <- subset(healthy_sample, subset = nFeature_RNA > 200 
+                         & nFeature_RNA < 2500 & percent.mt < 30)
+HCC_sample <- subset(HCC_sample, subset = nFeature_RNA > 200 
+                         & nFeature_RNA < 2500 & percent.mt < 30)
+```
+
+```{r data_integration}
+datasets.list <- list(healthy_sample, HCC_sample)
+
+datasets.list <- lapply(X = datasets.list, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+features <- SelectIntegrationFeatures(object.list = datasets.list)
+
+datasets.anchors <- FindIntegrationAnchors(object.list = datasets.list, anchor.features = features)
+datasets.integrated <- IntegrateData(anchorset = datasets.anchors)
+```
+
+```{r data_integration_option_2, echo=FALSE}
+#datasets.list <- list(healthy_sample, HCC_sample)
+#for (i in 1:length(datasets.list)) {
+#    datasets.list[[i]] <- SCTransform(datasets.list[[i]], verbose = FALSE)
+#}
+#datasets.features <- SelectIntegrationFeatures(object.list = datasets.list, nfeatures = 3000)
+#datasets.list <- PrepSCTIntegration(object.list = datasets.list, anchor.features = datasets.features, 
+#    verbose = FALSE)
+#datasets.anchors <- FindIntegrationAnchors(object.list = datasets.list, normalization.method = "SCT", 
+#    anchor.features = datasets.features, verbose = FALSE)
+#datasets.integrated <- IntegrateData(anchorset = datasets.anchors, normalization.method = "SCT", 
+#    verbose = FALSE)
+```
+
+```{r dim_reduction}
+#lognormalize
+datasets.integrated <- ScaleData(datasets.integrated, verbose = FALSE)
+datasets.integrated <- RunPCA(datasets.integrated, npcs = 30, verbose = FALSE)
+datasets.integrated <- RunUMAP(datasets.integrated, reduction = "pca", dims = 1:30)
+datasets.integrated <- FindNeighbors(datasets.integrated, reduction = "pca", dims = 1:30)
+datasets.integrated <- FindClusters(datasets.integrated, resolution = 0.5)
+#sctransform
+#datasets.integrated <- RunPCA(datasets.integrated, verbose = FALSE)
+#datasets.integrated <- RunUMAP(datasets.integrated, dims = 1:30)
+#plots <- DimPlot(datasets.integrated, group.by = c("tech", "celltype"), combine = FALSE)
+#plots <- lapply(X = plots, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, 
+#    byrow = TRUE, override.aes = list(size = 3))))
+#CombinePlots(plots)
+```
+
+```{r umap_visualization}
+p1 <- DimPlot(datasets.integrated, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(datasets.integrated, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+```
+
+```{r annotation_1}
+DefaultAssay(datasets.integrated) <- "RNA"
+features <- c("gene1", "gene2")
+#FeaturePlot(datasets.integrated, features = features, min.cutoff = "q9", label = TRUE)
+#RidgePlot(datasets.integrated, features = features, ncol = 2)
+#VlnPlot(datasets.integrated, features = features, split.by = "orig.ident")
+#DotPlot(datasets.integrated, features = features) + RotatedAxis()
+#DoHeatmap(subset(datasets.integrated, downsample = 100), features = features, size = 3)
+
+```
+
+```{r annotation_2}
+#library(AnnotationHub)
+#library(ensembldb)
+#library(multtest)
+#library(metap)
+#BiocManager::install('limma')
+#library('limma')
+
+# Connect to AnnotationHub
+#ah <- AnnotationHub()
+
+# Access the Ensembl database for organism
+#ahDb <- query(ah, 
+#              pattern = c("Homo sapiens", "EnsDb"), 
+#              ignore.case = TRUE)
+
+# Acquire the latest annotation files
+#id <- ahDb %>%
+#        mcols() %>%
+#        rownames() %>%
+#        tail(n = 1)
+
+# Download the appropriate Ensembldb database
+#edb <- ah[[id]]
+
+# Extract gene-level information from database
+#annotations <- genes(edb, 
+#                     return.type = "data.frame")
+
+# Select annotations of interest
+#annotations <- annotations %>%
+#        dplyr::select(gene_id, gene_name, seq_name, gene_biotype, description)
+
+#DefaultAssay(datasets.integrated) <-"RNA"
+#get_conserved <- function(cluster){
+#        FindConservedMarkers(datasets.integrated,
+#                             ident.1 = cluster,
+#                             grouping.var = "orig.ident",
+#                             only.pos = TRUE) %>%
+#                rownames_to_column(var = "gene") %>%
+#                cbind(cluster_id = cluster, .)
+#}
+
+#map and receive dataframe
+#conserved_markers <- FindAllMarkers(datasets.integrated, min.cells.group = 0)
+#gene_descriptions <- unique(annotations[, c("gene_name", "description")])
+
+#ann_conserved_markers <- left_join(x = conserved_markers,
+#                                   y = gene_descriptions,
+#                                   by = c("gene" = "gene_name"))
+#write.csv(ann_conserved_markers,"ann_conserved_markers.csv")
+```
+
+```{r name_clusters}
+datasets.integrated <- RenameIdents(datasets.integrated, '0' = 'my_cool_cells')
+```
+
+
+```{r how_many_cells_per_cluster_do_we_have}
+cell.num <- table(Idents(datasets.integrated))
+view(cell.num)
+```
+
+```{r reactome_pathways}
+#Reference: https://bioconductor.org/packages/release/bioc/vignettes/ReactomeGSA/inst/doc/analysing-scRNAseq.html
+my_awesome_cells <- subset(datasets.integrated, idents = c("my_cool_cells", "1"))
+gsva_result <- analyse_sc_clusters(my_awesome_cells, verbose = TRUE)
+pathway_expression <- pathways(gsva_result)
+
+colnames(pathway_expression) <- gsub("\\.Seurat", "", colnames(pathway_expression))
+
+pathway_expression[1:3,]
+
+max_difference <- do.call(rbind, apply(pathway_expression, 1, function(row) {
+    values <- as.numeric(row[2:length(row)])
+    return(data.frame(name = row[1], min = min(values), max = max(values)))
+}))
+max_difference$diff <- max_difference$max - max_difference$min
+# sort based on the difference
+max_difference <- max_difference[order(max_difference$diff, decreasing = T), ]
+
+head(max_difference)
+plot_gsva_pathway(gsva_result, pathway_id = rownames(max_difference)[1])
+
+plot_gsva_heatmap(gsva_result, max_pathways = 15, margins = c(6,20))
+
+# limit to selected B cell related pathways
+relevant_pathways <- c("R-HSA-983170", "R-HSA-388841", "R-HSA-2132295", "R-HSA-983705", "R-HSA-5690714")
+plot_gsva_heatmap(gsva_result, 
+                  pathway_ids = relevant_pathways, # limit to these pathways
+                  margins = c(6,30), # adapt the figure margins in heatmap.2
+                  dendrogram = "col", # only plot column dendrogram
+                  scale = "row", # scale for each pathway
+                  key = FALSE, # don't display the color key
+                  lwid=c(0.1,4)) # remove the white space on the left
+
+```
+
+```{r go_analysis}
+#Reference: https://ucdavis-bioinformatics-training.github.io/2017_2018-single-cell-RNA-sequencing-Workshop-UCD_UCB_UCSF/day3/scRNA_Workshop-PART6.html
+#BiocManager::install("org.Hs.eg.db")
+library("org.Hs.eg.db")
+cluster0 <- subset(datasets.integrated, idents = "0")
+expr <- cluster0@assays$RNA@data
+# Select genes that are expressed > 0 in at least 75% of cells (somewhat arbitrary definition)
+n.gt.0 <- apply(expr, 1, function(x)length(which(x > 0)))
+expressed.genes <- rownames(expr)[which(n.gt.0/ncol(expr) >= 0.75)]
+all.genes <- rownames(expr)
+
+# define geneList as 1 if gene is in expressed.genes, 0 otherwise
+geneList <- ifelse(all.genes %in% expressed.genes, 1, 0)
+names(geneList) <- all.genes
+
+# Create topGOdata object
+    GOdata <- new("topGOdata",
+        ontology = "BP", # use biological process ontology
+        allGenes = geneList,
+        geneSelectionFun = function(x)(x == 1),
+              annot = annFUN.org, mapping = "org.Hs.eg.db", ID = "symbol")
+
+resultFisher <- runTest(GOdata, algorithm = "elim", statistic = "fisher")
+allres <- GenTable(GOdata, Fisher = resultFisher, topNodes = 20, numChar = 60)
+
+showSigOfNodes(GOdata, score(resultFisher), firstSigNode=5, useInfo ='all')
+```
+
+

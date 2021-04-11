@@ -1,0 +1,399 @@
+---
+title: Single-cell Course Workshop Day 2
+---
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+options(repr.plot.width=11, repr.plot.height=11)
+```
+
+```{r}
+#load in the counts matrices
+cbmc.rna <- read.csv(file = './GEX_counts.csv', row.names = 1)
+cbmc.ab <- read.csv(file = './AB_counts.csv', row.names = 1)
+```
+
+```{r}
+# creates a Seurat object based on the scRNA-seq data
+cbmc <- CreateSeuratObject(counts = cbmc.rna)
+cbmc
+# The cbmc object contains an assay storing RNA measurement
+Assays(cbmc)
+```
+
+```{r}
+# create a new assay to store ab information
+ab_assay <- CreateAssayObject(counts = cbmc.ab)
+
+# add this assay to the previously created Seurat object
+cbmc[["ab"]] <- ab_assay
+
+# Validate that the object now contains multiple assays
+Assays(cbmc)
+```
+
+```{r}
+#look into the feature names in the AB-assay data
+rownames(cbmc[["ab"]])
+```
+
+```{r}
+# The number of features and UMIs (nFeature_RNA and nCount_RNA) are automatically calculated for every object by Seurat.
+# We calculate the percentage of mitochondrial features here and store it in object metadata as `percent.mito`.
+# We use raw count data since this represents non-transformed and non-log-normalized counts
+# The % of UMI mapping to MT-features is a common scRNA-seq QC metric.
+mito.features <- grep(pattern = "^MT-", x = rownames(x = cbmc), value = TRUE)
+percent.mito <- Matrix::colSums(x = GetAssayData(object = cbmc, slot = 'counts')[mito.features, ]) / Matrix::colSums(x = GetAssayData(object = cbmc, slot = 'counts'))
+```
+
+```{r}
+# The [[ operator can add columns to object metadata, and is a great place to stash QC stats
+cbmc[['percent.mito']] <- percent.mito
+VlnPlot(object = cbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mito"), ncol = 3, pt.size = 0.01)
+```
+
+```{r}
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything 
+# calculated by the object, i.e. columns in object metadata, PC scores etc.
+FeatureScatter(object = cbmc, feature1 = "nCount_RNA", feature2 = "percent.mito")
+```
+
+```{r}
+#visualise the UMI and genes distribution
+FeatureScatter(object = cbmc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+```
+
+```{r}
+#First QC step done! 
+cbmc
+```
+
+## Cluster and visualize cells using the usual scRNA-seq workflow, and examine for the potential presence of batch effects.
+
+```{r}
+#with the help of this command you can switch into the AB assay
+DefaultAssay(cbmc) <- 'ab'
+#normalize and scale the AB assay
+cbmc <- NormalizeData(object = cbmc, assay = "ab", normalization.method = "CLR")
+cbmc <- ScaleData(cbmc, assay = "ab")
+```
+
+```{r}
+#put the AB assay aside, let's continue with the RNA assay
+#with the help of this command you can switch into the RNA assay
+DefaultAssay(cbmc) <- 'RNA'
+```
+
+```{r}
+#Normalize your RNA assay
+cbmc <- NormalizeData(object = cbmc, normalization.method = "LogNormalize", scale.factor = 1e4)
+```
+
+```{r}
+#FindVariable Features, remove the ribosomal genes from the variable features
+cbmc <- FindVariableFeatures(cbmc, selection.method = "vst", nfeatures = 2000)
+length(x = VariableFeatures(object = cbmc))#length before removal
+markers.remove <- grep(pattern = "^RPL|^RPS",  x = rownames(x = cbmc), value = TRUE)#identify ribosomal genes
+VariableFeatures(object = cbmc) <- VariableFeatures(object = cbmc)[!(VariableFeatures(object = cbmc)%in%markers.remove)]#remove them from the Variable Features
+length(VariableFeatures(object = cbmc))#length after removal
+```
+
+```{r}
+# Identify the 20 most highly variable genes
+top20 <- head(VariableFeatures(cbmc), 20)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(cbmc)
+plot2 <- LabelPoints(plot = plot1, points = top20, repel = TRUE)
+plot2
+```
+
+```{r}
+#Scale RNA assay, run PCA on the RNA assay
+cbmc <- ScaleData(cbmc, features = VariableFeatures(cbmc))
+cbmc <- RunPCA(cbmc, features = VariableFeatures(object = cbmc))
+
+DimPlot(cbmc)
+```
+
+```{r}
+#look into the ellbow plot to determine the number of the PCs
+ElbowPlot(object = cbmc, ndims = 50)
+```
+
+```{r}
+#look into the Heatmap to determine the number of the PCs
+DimHeatmap(object = cbmc, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 2, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 3, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 4, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 5, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 6, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 7, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 8, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 9, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 10, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 11, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 12, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 13, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 14, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 15, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 16, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 17, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 18, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 19, cells = 500, balanced = TRUE)
+DimHeatmap(object = cbmc, dims = 20, cells = 500, balanced = TRUE)
+```
+
+# Cluster the cells
+
+```{r}
+#find neighbours and cluster the cells
+cbmc <- FindNeighbors(object = cbmc, dims = 1:10)
+cbmc <- FindClusters(object = cbmc, resolution = 0.5)
+```
+
+## Run Non-linear dimensional reduction (tSNE)
+
+```{r}
+#run tsne
+cbmc <- RunTSNE(object = cbmc, dims = 1:10)
+```
+
+```{r}
+#look how shitty it looks
+DimPlot(cbmc, reduction = 'tsne', label = TRUE, pt.size = 1)
+```
+
+```{r}
+#run umap
+cbmc <- RunUMAP(cbmc, dims = 1:10)
+```
+
+```{r}
+#what a beautiful UMAP!
+DimPlot(cbmc, reduction = 'umap', label = TRUE, pt.size = 1, label.size = 8)
+```
+
+```{r}
+#look into some key markers for immune cells 
+DefaultAssay(cbmc) <- 'RNA'
+genes_rna <- c('CD3E', 'CD4', 'CD8A', 'CD14', 'CD19')
+#CD3E - for T Cells
+#CD4  - for CD4 T cells
+#CD8A - for CD8A t cells
+#CD14 - for myeloid cells
+#CD19 - for B cells
+
+#nice way to iterate in plotting
+for (i in 1:length(genes_rna)){
+    print(FeaturePlot(cbmc, reduction = 'umap', features = genes_rna[i], cols = c('grey','red'), pt.size = 1, label = TRUE))
+}
+```
+
+```{r}
+#look for the markers in the AB assay
+DefaultAssay(cbmc) <- 'ab'
+rownames(cbmc)
+```
+
+```{r}
+#look for the markers in the AB assay
+genes_ab <- c('CD3', 'CD4', 'CD8', 'CD19')
+for (i in 1:length(genes_ab)){
+    print(FeaturePlot(cbmc, reduction = 'umap', features = genes_ab[i], cols = c('grey','red'), pt.size = 1, label = TRUE))
+}
+```
+
+# Cluster markers
+
+```{r}
+#swith to the RNA assay
+DefaultAssay(cbmc) <- 'RNA'
+```
+
+```{r}
+#look into the DE expression of each cluster
+featurescbmc <- rownames(cbmc)
+markers.remove <- grep(pattern = "^TRAV|^TRBV|^TRGV|^TRDV|^RPL|^RPS", x = rownames(cbmc), value = TRUE) #remove TCR variable genes and ribosomal genes from the analysis
+featurescbmc <- featurescbmc[!(featurescbmc%in%markers.remove)]
+cbmc.markers <- FindAllMarkers(object = cbmc, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, features = featurescbmc)
+```
+
+```{r}
+DimPlot(cbmc, reduction = 'umap', label = TRUE, pt.size = 1, label.size = 8)
+```
+
+```{r}
+#visualise top 10 markers by avg Fold Change (log2)
+top10 <- cbmc.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+top10
+```
+
+```{r}
+#look into the average heatmap
+cluster.averages_cbmc <- AverageExpression(cbmc, assay = "RNA", return.seurat = TRUE) # , verbose = FALSE)
+```
+
+```{r, fig.width=12, fig.height=12} 
+#look into the average heatmap
+DoHeatmap(cluster.averages_cbmc, features = top10$gene)
+```
+
+```{r, fig.width=12, fig.height=12} 
+#look into the DotPlot
+top5 <- cbmc.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+DotPlot(cbmc, features = unique(top5$gene), dot.scale = 8) + RotatedAxis()
+```
+
+```{r}
+#Lets find out a bit more about our T cells
+#for Naiive T cells
+VlnPlot(cbmc, features = 'CCR7')
+VlnPlot(cbmc, features = 'CD45RA', assay = 'ab')
+
+#for cluster 5
+VlnPlot(cbmc, features = 'S100A4') #memory subtype
+VlnPlot(cbmc, features = 'DUSP2') #negative feedback loop
+VlnPlot(cbmc, features = 'ZNF683') #differentiation factor
+```
+
+```{r}
+head(cbmc@meta.data)
+```
+
+```{r}
+#assign names for your clusters:
+for(i in 1:nrow(cbmc@meta.data)){
+    if(cbmc@meta.data$seurat_clusters[i] == 0){
+        cbmc@meta.data$cluster_names[i] <- 'CD4 T-cells'
+    }
+    if(cbmc@meta.data$seurat_clusters[i] == 1){
+        cbmc@meta.data$cluster_names[i] <- 'Myeloid'
+    }
+    if(cbmc@meta.data$seurat_clusters[i] == 2){
+        cbmc@meta.data$cluster_names[i] <- 'B cells'
+    }
+    if(cbmc@meta.data$seurat_clusters[i] == 3){
+        cbmc@meta.data$cluster_names[i] <- 'CD8 T-cells'
+    }
+    if(cbmc@meta.data$seurat_clusters[i] == 4){
+        cbmc@meta.data$cluster_names[i] <- 'Myeloid-T doublets'
+    }
+    if(cbmc@meta.data$seurat_clusters[i] == 5){
+        cbmc@meta.data$cluster_names[i] <- 'T memory'
+    }
+}
+```
+
+```{r}
+#check meta.data again
+head(cbmc@meta.data)
+```
+
+```{r}
+#DimPlot new cluster names
+DimPlot(cbmc, reduction = 'umap', label = TRUE, pt.size = 1, label.size = 4, repel = TRUE, group.by = 'cluster_names') #notice the group.by parameter
+```
+
+```{r}
+#you can assign idents to any column of meta.data you want!
+Idents(cbmc) <- 'cluster_names'
+levels(cbmc)
+DimPlot(cbmc, reduction = 'umap', label = TRUE, pt.size = 1, label.size = 4, repel = TRUE)
+```
+
+# Visualize Ab signal
+
+```{r}
+DefaultAssay(cbmc) <- 'ab'
+```
+
+```{r}
+#With feature umap
+FeaturePlot(cbmc, reduction = 'umap', features = 'CD4', cols = c('grey','red'), pt.size = 1, label = TRUE, label.size = 4)
+FeaturePlot(cbmc, reduction = 'umap', features = 'CD8', cols = c('grey','red'), pt.size = 1, label = TRUE, label.size = 4)
+```
+
+```{r}
+#With VlnPlot 
+VlnPlot(cbmc, features = 'CD4')
+VlnPlot(cbmc, features = 'CD8')
+VlnPlot(cbmc, features = 'CD45RA')
+```
+
+```{r}
+#With RidgePlot 
+RidgePlot(cbmc, features = 'CD4')
+RidgePlot(cbmc, features = 'CD8')
+RidgePlot(cbmc, features = 'CD45RA')
+```
+
+```{r}
+#With FeatureScatter
+FeatureScatter(cbmc, feature1 = 'CD3', feature2  = 'CD4', pt.size = 1)
+FeatureScatter(cbmc, feature1 = 'CD45RA', feature2  = 'CD4', pt.size = 1)
+FeatureScatter(cbmc, feature1 = 'CD45RA', feature2  = 'CD8', pt.size = 1)
+```
+
+```{r}
+#gate selected cells!
+plot <- FeatureScatter(cbmc, feature1 = 'CD45RA', feature2  = 'CD4', pt.size = 1)
+select.cells <- CellSelector(plot = plot)
+```
+
+```{r}
+#look inside into the gating string
+head(select.cells)
+```
+
+# Cluster with help of the RNA AND AB-Data
+
+```{r}
+DefaultAssay(cbmc) <- 'ab'
+#run pca on AB data
+cbmc <- RunPCA(cbmc, features = rownames(cbmc), reduction.name = 'ab_pca')
+cbmc
+```
+
+```{r}
+#Elbowplot to determine the number of the PCs
+ElbowPlot(object = cbmc, ndims = 50, reduction = 'pca')
+ElbowPlot(object = cbmc, ndims = 50, reduction = 'ab_pca')
+```
+
+```{r}
+#run the multimodal neighbours on BOTHs PCA reduction (rna and ab)
+cbmc <- FindMultiModalNeighbors(
+  cbmc, reduction.list = list("pca", "ab_pca"), 
+  dims.list = list(1:10, 1:10), modality.weight.name = "RNA.weight"
+)
+```
+
+```{r}
+#Find your clusters 
+cbmc <- FindClusters(cbmc, graph.name = "wsnn", algorithm = 3, resolution = 0.5, verbose = FALSE)
+```
+
+```{r}
+#run UMAP
+cbmc <- RunUMAP(cbmc, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+```
+
+```{r}
+#plot the results
+DimPlot(cbmc, reduction = 'wnn.umap', label = TRUE, pt.size = 1, label.size = 4) #not the reduction parameter
+DimPlot(cbmc, reduction = 'wnn.umap', label = TRUE, pt.size = 1, label.size = 4, group.by = 'cluster_names') #look on the previous clustering
+```
+
+```{r}
+#which cluster is clustererd with the help of RNA information the most?
+VlnPlot(cbmc, features = "RNA.weight", group.by = 'seurat_clusters', sort = TRUE, pt.size = 1)
+```
+
